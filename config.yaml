@@ -1,0 +1,12 @@
+youtube:
+  channel_url: ""           # 예: https://www.youtube.com/@channel_handle (CLI --channel이 우선)
+  date_range:
+    start: ""               # 예: 2026-01-01 (CLI --start가 우선)
+    end: ""                 # 예: 2026-04-30 (CLI --end가 우선)
+  languages: ["ko", "en"]   # 트랜스크립트 언어 우선순위
+  max_videos: 50            # 안전 상한선
+
+output:
+  base_dir: "./output"
+
+# 이미 처리된 영상 스킵은 CLI의 --all 플래그로 제어 (.processed.json 기반)
