@@ -89,6 +89,7 @@ TEMPLATES = {
     'heavy':   './templates/deep_analysis.md',
     'medium':  './templates/medium_summary.md',
     'compact': './templates/compact.md',
+    'compact_local': './templates/compact_local.md',
 }
 
 
@@ -130,6 +131,49 @@ def _print_summary(manifest, skipped, llm='claude'):
     if llm == 'claude':
         print("\n[다음 단계] Claude Code에서 pending.json을 읽어")
         print("각 transcript_path 파일을 deep_analysis.md 템플릿으로 처리하세요.")
+
+
+def _run_local_processing(manifest, cfg):
+    """로컬 LLM(OpenAI 호환 API)으로 pending 항목을 처리하고 output 파일로 저장."""
+    from src.llm_processor import process_with_local_llm
+
+    channel_dir  = manifest['channel_dir']
+    output_base  = manifest['output_base']
+    channel_name = manifest['channel_name']
+    template     = manifest['template']
+
+    # llm_processor는 config['processing']['template']을 읽으므로 manifest의 템플릿을 주입
+    local_cfg = dict(cfg)
+    local_cfg['processing'] = {**local_cfg.get('processing', {}), 'template': template}
+
+    model = local_cfg.get('local_llm', {}).get('model', 'local')
+    saved = []
+    for item in manifest['pending']:
+        title        = item.get('title', item['video_id'])
+        published_at = item.get('published_at', '')
+        url          = item.get('url', '')
+        duration     = item.get('duration', '') or ''
+        channel      = item.get('channel_name', channel_name)
+
+        with open(item['transcript_path'], 'r', encoding='utf-8') as f:
+            transcript = f.read()
+
+        result = process_with_local_llm(transcript, local_cfg)
+
+        header = (
+            f"# {title}\n\n"
+            f"**채널**: {channel}\n"
+            f"**날짜**: {published_at}\n"
+            f"**링크**: {url}\n"
+            f"**길이**: {duration}\n\n"
+            f"---\n\n"
+        )
+        filepath = save_markdown(header + result, channel_name, published_at, title, output_base)
+        mark_processed(item['video_id'], channel_dir)
+        saved.append(filepath)
+        print(f"  ✅ [{model}] {title} → {filepath}")
+
+    return saved
 
 
 def _run_gemini_processing(manifest, gemini_api_key, gemini_model):
@@ -191,6 +235,18 @@ def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='clau
         print(f"Gemini 처리 시작  |  모드: {mode}  |  티어: {gemini_model}")
         print(f"{sep}")
         saved = _run_gemini_processing(manifest, gemini_api_key, gemini_model)
+        print(f"\n완료: {len(saved)}개 파일 저장")
+
+    elif llm == 'local' and pending:
+        if 'local_llm' not in cfg:
+            print("오류: config.yaml에 local_llm 섹션이 필요합니다.")
+            sys.exit(1)
+        llm_cfg  = cfg['local_llm']
+        sep = "=" * 60
+        print(f"\n{sep}")
+        print(f"로컬 LLM 처리 시작  |  모드: {mode}  |  모델: {llm_cfg.get('model', '?')} @ {llm_cfg.get('base_url', '?')}")
+        print(f"{sep}")
+        saved = _run_local_processing(manifest, cfg)
         print(f"\n완료: {len(saved)}개 파일 저장")
 
     return manifest
@@ -300,8 +356,8 @@ def build_parser():
     )
     p.add_argument('--url', metavar='URL', help='단일 영상 URL')
     p.add_argument('--channel', metavar='URL', help='채널 URL (모드 1~4)')
-    p.add_argument('--mode', choices=['heavy', 'medium', 'compact'], default='heavy',
-                   help='정리 모드: heavy=심층분석(기본), medium=줄거리파악, compact=압축요약')
+    p.add_argument('--mode', choices=['heavy', 'medium', 'compact', 'compact_local'], default='heavy',
+                   help='정리 모드: heavy=심층분석(기본), medium=줄거리파악, compact=압축요약, compact_local=로컬LLM 전용 compact')
     p.add_argument('--latest', action='store_true', help='[모드 1] 최신 미처리 영상 1개')
     p.add_argument('--start', metavar='YYYY-MM-DD', help='시작일')
     p.add_argument('--end', metavar='YYYY-MM-DD', help='종료일 (기본: 오늘)')
@@ -310,8 +366,9 @@ def build_parser():
                    help='[모드 4] 이미 처리된 영상도 포함')
     p.add_argument('--index', action='store_true', help='INDEX.md 재생성')
     # LLM 선택
-    p.add_argument('--llm', choices=['claude', 'gemini'], default='claude',
-                   help='LLM 엔진: claude=Claude Code 스킬(기본), gemini=Gemini API 자동 처리')
+    p.add_argument('--llm', choices=['claude', 'gemini', 'local'], default='claude',
+                   help='LLM 엔진: claude=Claude Code 스킬(기본), gemini=Gemini API 자동 처리, '
+                        'local=OpenAI 호환 로컬 LLM (config.yaml의 local_llm 섹션)')
     p.add_argument('--gemini-model', dest='gemini_model',
                    choices=list(GEMINI_MODELS.keys()), default='pro',
                    help='Gemini 티어: pro(기본,일25회) / thinking(일500회) / flash(일1500회). '

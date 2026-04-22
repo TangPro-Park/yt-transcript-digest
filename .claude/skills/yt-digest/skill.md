@@ -5,7 +5,7 @@ description: >
   트리거 예시: "유튜브 정리해줘", "이 채널 안본 영상 정리", "저번주 영상 분석해줘",
   "최신 영상 트랜스크립트해줘", "이 영상 정리해줘 [URL]", "[채널] 영상 [기간] 동안 정리"
   정리 모드: heavy(심층분석, 기본), medium(줄거리파악), compact(고밀도 압축)
-  처리 엔진: claude(Claude Code 세션 직접, 기본) / gemini(Gemini API 자동 처리)
+  처리 엔진: claude(Claude Code 세션 직접, 기본) / gemini(Gemini API 자동 처리) / local(OpenAI 호환 로컬 LLM, 토큰 절약)
 ---
 
 # 유튜브 정리하기 (yt-digest)
@@ -25,7 +25,7 @@ description: >
 | **채널 URL** | 메시지에서 추출. 없으면 질문 |
 | **조회 모드** | 아래 표 참고해서 판단 |
 | **정리 모드** | 아래 표 참고해서 판단. 미지정 시 heavy 기본 |
-| **처리 엔진** | 사용자가 "Gemini로", "자동으로 정리해줘"처럼 명시하면 `--llm gemini`. 기본은 Claude |
+| **처리 엔진** | "Gemini로"/"자동으로"→`--llm gemini`, "로컬로"/"Ollama로"/"토큰 아끼게"→`--llm local`, 기본은 `claude` |
 | **기간** | 조회 모드에 따라 필요 시 질문 |
 | **키워드** | 조회 모드 3일 때 추출 |
 
