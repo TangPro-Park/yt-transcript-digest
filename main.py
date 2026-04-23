@@ -41,6 +41,7 @@ from src.discover import (
 from src.storage import generate_index, load_processed, mark_processed, sanitize_dirname, save_markdown
 from src.transcript import CACHE_DIR as TRANSCRIPT_CACHE_DIR, fetch_transcript
 from src.llm import process_with_gemini, print_gemini_model_info, GEMINI_MODELS
+from src.claude_cli import process_with_claude_cli, CLAUDE_MODELS, DEFAULT_MODEL as CLAUDE_DEFAULT_MODEL
 
 # Windows 콘솔 cp949 → utf-8 강제
 if hasattr(sys.stdout, 'reconfigure'):
@@ -77,11 +78,13 @@ def _build_entry(video, languages):
         'duration':     video.get('duration', ''),
         'url':          video.get('url', ''),
     }
-    text = fetch_transcript(video['video_id'], languages, metadata=metadata)
+    channel_name = video.get('channel_name', 'unknown')
+    cache_dir = os.path.join(TRANSCRIPT_CACHE_DIR, sanitize_dirname(channel_name))
+    text = fetch_transcript(video['video_id'], languages, cache_dir=cache_dir, metadata=metadata)
     if text is None:
         return None, video
-    video['transcript_path'] = os.path.join(TRANSCRIPT_CACHE_DIR, f"{video['video_id']}.txt")
-    video['metadata_path']   = os.path.join(TRANSCRIPT_CACHE_DIR, f"{video['video_id']}.json")
+    video['transcript_path'] = os.path.join(cache_dir, f"{video['video_id']}.txt")
+    video['metadata_path']   = os.path.join(cache_dir, f"{video['video_id']}.json")
     return video, None
 
 
@@ -176,6 +179,40 @@ def _run_local_processing(manifest, cfg):
     return saved
 
 
+def _run_claude_processing(manifest, claude_model):
+    """claude CLI subprocess로 pending 항목을 처리하고 output 파일로 저장."""
+    channel_dir  = manifest['channel_dir']
+    output_base  = manifest['output_base']
+    channel_name = manifest['channel_name']
+    template     = manifest['template']
+
+    saved = []
+    for item in manifest['pending']:
+        title        = item.get('title', item['video_id'])
+        published_at = item.get('published_at', '')
+        url          = item.get('url', '')
+        duration     = item.get('duration', '') or ''
+        channel      = item.get('channel_name', channel_name)
+
+        result = process_with_claude_cli(item, template, claude_model)
+
+        header = (
+            f"# {title}\n\n"
+            f"**채널**: {channel}\n"
+            f"**날짜**: {published_at}\n"
+            f"**링크**: {url}\n"
+            f"**길이**: {duration}\n\n"
+            f"---\n\n"
+        )
+        filepath = save_markdown(header + result, channel_name, published_at, title, output_base)
+        mark_processed(item['video_id'], channel_dir)
+        saved.append(filepath)
+        model_id = CLAUDE_MODELS.get(claude_model, claude_model)
+        print(f"  ✅ [{model_id}] {title} → {filepath}")
+
+    return saved
+
+
 def _run_gemini_processing(manifest, gemini_api_key, gemini_model):
     """Gemini API로 pending 항목을 처리하고 output 파일로 저장."""
     channel_dir  = manifest['channel_dir']
@@ -209,7 +246,7 @@ def _run_gemini_processing(manifest, gemini_api_key, gemini_model):
     return saved
 
 
-def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='claude', gemini_model='pro'):
+def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
     """영상 목록에서 트랜스크립트를 수집하고 manifest를 저장 (또는 Gemini로 직접 처리)."""
     languages = cfg['youtube'].get('languages', ['ko', 'en'])
     channel_name = videos[0]['channel_name'] if videos else 'unknown'
@@ -225,7 +262,15 @@ def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='clau
     manifest = _save_manifest(cfg, channel_name, pending, skipped, mode=mode)
     _print_summary(manifest, skipped, llm=llm)
 
-    if llm == 'gemini' and pending:
+    if llm == 'claude' and pending:
+        sep = "=" * 60
+        print(f"\n{sep}")
+        print(f"Claude CLI 처리 시작  |  모드: {mode}  |  모델: {CLAUDE_MODELS.get(claude_model, claude_model)}")
+        print(f"{sep}")
+        saved = _run_claude_processing(manifest, claude_model)
+        print(f"\n완료: {len(saved)}개 파일 저장")
+
+    elif llm == 'gemini' and pending:
         gemini_api_key = _load_env_key('GEMINI_API_KEY')
         if not gemini_api_key:
             print("오류: .env에 GEMINI_API_KEY를 설정하세요.")
@@ -254,16 +299,16 @@ def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='clau
 
 # ── 모드별 실행 함수 ─────────────────────────────────────────
 
-def run_single(video_url, cfg, api_key=None, mode='heavy', llm='claude', gemini_model='pro'):
+def run_single(video_url, cfg, api_key=None, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
     """단일 URL."""
     logger = logging.getLogger('main')
     logger.info(f"=== 단일 영상 [{mode}|{llm}]: {video_url} ===")
     video = get_video_by_url(video_url, api_key)
     logger.info(f"제목: {video['title']} | 날짜: {video['published_at']}")
-    return _process_video_list([video], cfg, mode=mode, llm=llm, gemini_model=gemini_model)
+    return _process_video_list([video], cfg, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model)
 
 
-def run_latest(channel_url, cfg, api_key, mode='heavy', llm='claude', gemini_model='pro'):
+def run_latest(channel_url, cfg, api_key, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
     """모드 1: 채널의 가장 최근 미처리 영상 1개."""
     logger = logging.getLogger('main')
     logger.info(f"=== 최신 미처리 영상 조회 [{mode}|{llm}]: {channel_url} ===")
@@ -275,10 +320,10 @@ def run_latest(channel_url, cfg, api_key, mode='heavy', llm='claude', gemini_mod
     if not videos:
         print("모든 최근 영상이 이미 처리되었습니다.")
         return None
-    return _process_video_list(videos, cfg, mode=mode, llm=llm, gemini_model=gemini_model)
+    return _process_video_list(videos, cfg, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model)
 
 
-def run_range(channel_url, start_date, end_date, cfg, api_key, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro'):
+def run_range(channel_url, start_date, end_date, cfg, api_key, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
     """모드 2 (미처리만) / 모드 4 (전체)."""
     logger = logging.getLogger('main')
     label = "미처리" if skip_processed else "전체"
@@ -297,10 +342,10 @@ def run_range(channel_url, start_date, end_date, cfg, api_key, skip_processed=Tr
 
     channel_dir = os.path.join(cfg['output']['base_dir'], sanitize_dirname(videos[0]['channel_name']))
     processed = load_processed(channel_dir) if skip_processed else set()
-    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model)
+    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model)
 
 
-def run_keyword(channel_url, keyword, cfg, api_key, start_date=None, end_date=None, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro'):
+def run_keyword(channel_url, keyword, cfg, api_key, start_date=None, end_date=None, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
     """모드 3: 키워드 검색."""
     logger = logging.getLogger('main')
     logger.info(f"=== 키워드 검색 [{mode}|{llm}]: '{keyword}' ===")
@@ -319,7 +364,7 @@ def run_keyword(channel_url, keyword, cfg, api_key, start_date=None, end_date=No
 
     channel_dir = os.path.join(cfg['output']['base_dir'], sanitize_dirname(videos[0]['channel_name']))
     processed = load_processed(channel_dir) if skip_processed else set()
-    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model)
+    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model)
 
 
 def _guess_channel_dir(cfg, channel_url, api_key):
@@ -374,6 +419,9 @@ def build_parser():
                    help='Gemini 티어: pro(기본,일25회) / thinking(일500회) / flash(일1500회). '
                         '미지정 시 pro→thinking→flash 자동 폴백')
     p.add_argument('--gemini-info', action='store_true', help='Gemini 모델 티어 안내 출력')
+    p.add_argument('--claude-model', dest='claude_model',
+                   choices=list(CLAUDE_MODELS.keys()), default=CLAUDE_DEFAULT_MODEL,
+                   help=f'Claude 모델: haiku(기본,빠름/저비용) / sonnet / opus. --llm claude 전용')
     return p
 
 
@@ -413,7 +461,7 @@ def main():
 
     # ── 단일 URL
     if args.url:
-        run_single(args.url, cfg, api_key, mode=args.mode, llm=args.llm, gemini_model=args.gemini_model)
+        run_single(args.url, cfg, api_key, mode=args.mode, llm=args.llm, gemini_model=args.gemini_model, claude_model=args.claude_model)
         return
 
     # ── 채널 모드 공통 체크
@@ -427,7 +475,7 @@ def main():
 
     # ── 모드 1: --latest
     if args.latest:
-        run_latest(channel, cfg, api_key, mode=args.mode, llm=args.llm, gemini_model=args.gemini_model)
+        run_latest(channel, cfg, api_key, mode=args.mode, llm=args.llm, gemini_model=args.gemini_model, claude_model=args.claude_model)
         return
 
     # ── 모드 3: --keyword
@@ -443,6 +491,7 @@ def main():
             mode=args.mode,
             llm=args.llm,
             gemini_model=args.gemini_model,
+            claude_model=args.claude_model,
         )
         return
 
@@ -463,6 +512,7 @@ def main():
         mode=args.mode,
         llm=args.llm,
         gemini_model=args.gemini_model,
+        claude_model=args.claude_model,
     )
 
 

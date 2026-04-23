@@ -7,7 +7,7 @@ youtube:
   max_videos: 50            # 안전 상한선
 
 output:
-  base_dir: "./output"
+  base_dir: "./output/취미/위스키"
 
 # 이미 처리된 영상 스킵은 CLI의 --all 플래그로 제어 (.processed.json 기반)
 
