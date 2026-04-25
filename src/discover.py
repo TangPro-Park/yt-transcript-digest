@@ -256,6 +256,51 @@ def get_latest_unprocessed(api_key, channel_url, processed_ids, max_check=30):
     return []
 
 
+def get_popular_videos(api_key, channel_url, max_results=50):
+    """채널의 인기 영상을 조회수 내림차순으로 가져온다.
+
+    search.list API 사용 (100 quota units/call).
+    Returns: list of {video_id, title, published_at, duration, url, channel_name}
+    """
+    youtube = build('youtube', 'v3', developerKey=api_key)
+    channel_id, channel_name, _ = _get_channel_info(youtube, channel_url)
+
+    videos = []
+    next_page = None
+    while len(videos) < max_results:
+        kwargs = dict(
+            part='snippet',
+            channelId=channel_id,
+            type='video',
+            order='viewCount',
+            maxResults=min(50, max_results - len(videos)),
+        )
+        if next_page:
+            kwargs['pageToken'] = next_page
+
+        resp = youtube.search().list(**kwargs).execute()
+        for item in resp.get('items', []):
+            if item['id'].get('kind') != 'youtube#video':
+                continue
+            snippet = item['snippet']
+            published = datetime.fromisoformat(snippet['publishedAt'].replace('Z', '+00:00'))
+            videos.append({
+                'video_id': item['id']['videoId'],
+                'title': snippet['title'],
+                'published_at': published.strftime('%Y-%m-%d'),
+                'url': f"https://www.youtube.com/watch?v={item['id']['videoId']}",
+                'duration': None,
+                'channel_name': channel_name,
+            })
+
+        next_page = resp.get('nextPageToken')
+        if not next_page or len(videos) >= max_results:
+            break
+
+    logger.info(f"인기순 영상: {len(videos)}개")
+    return _fetch_durations(youtube, videos[:max_results])
+
+
 def get_videos_by_keyword(api_key, channel_url, keyword, start_date=None, end_date=None, max_results=50):
     """채널에서 키워드가 포함된 영상 목록을 가져온다.
 

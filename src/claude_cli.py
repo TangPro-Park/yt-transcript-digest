@@ -1,7 +1,28 @@
+import glob
 import logging
+import shutil
 import subprocess
 
 logger = logging.getLogger(__name__)
+
+
+def _find_claude_exe():
+    """claude 실행파일 경로를 찾는다. PATH 우선, 없으면 VS Code 확장 경로 탐색."""
+    if shutil.which('claude'):
+        return 'claude'
+    import os
+    home = os.path.expanduser('~')
+    patterns = [
+        os.path.join(home, '.antigravity', 'extensions', 'anthropic.claude-code-*', 'resources', 'native-binary', 'claude.exe'),
+        os.path.join(home, 'AppData', 'Local', 'Packages', 'Claude_*', 'LocalCache', 'Roaming', 'Claude', 'claude-code', '*', 'claude.exe'),
+    ]
+    candidates = []
+    for p in patterns:
+        candidates.extend(glob.glob(p))
+    if candidates:
+        candidates.sort(reverse=True)
+        return candidates[0]
+    return 'claude'
 
 CLAUDE_MODELS = {
     'haiku':  'claude-haiku-4-5-20251001',
@@ -32,8 +53,16 @@ def process_with_claude_cli(item, template_path, model_alias=DEFAULT_MODEL):
     title = item.get('title', item['video_id'])
     logger.info(f"claude CLI [{model_id}] 호출: {title}")
 
+    claude_exe = _find_claude_exe()
+    logger.info(f"claude 실행파일: {claude_exe}")
     result = subprocess.run(
-        ['claude', '--model', model_id, '--print'],
+        [
+            claude_exe,
+            '--model', model_id,
+            '--print',
+            '--tools', '',
+            '--system-prompt', '당신은 텍스트 생성기입니다. 도구 사용, 파일 쓰기, 질문, 승인 요청 없이 주어진 지시에 따라 마크다운 문서를 stdout으로 출력하기만 합니다.',
+        ],
         input=prompt,
         capture_output=True,
         text=True,

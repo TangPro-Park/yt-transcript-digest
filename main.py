@@ -37,6 +37,7 @@ from src.discover import (
     get_videos,
     get_latest_unprocessed,
     get_videos_by_keyword,
+    get_popular_videos,
 )
 from src.storage import generate_index, load_processed, mark_processed, sanitize_dirname, save_markdown
 from src.transcript import CACHE_DIR as TRANSCRIPT_CACHE_DIR, fetch_transcript
@@ -96,11 +97,12 @@ TEMPLATES = {
 }
 
 
-def _save_manifest(cfg, channel_name, pending, skipped, mode='heavy'):
+def _save_manifest(cfg, channel_name, pending, skipped, mode='heavy', channel_url=''):
     os.makedirs('./cache', exist_ok=True)
     channel_dir = os.path.join(cfg['output']['base_dir'], sanitize_dirname(channel_name))
     manifest = {
         'channel_name': channel_name,
+        'channel_url': channel_url,
         'channel_dir': channel_dir,
         'template': TEMPLATES[mode],
         'mode': mode,
@@ -150,6 +152,7 @@ def _run_local_processing(manifest, cfg):
     local_cfg['processing'] = {**local_cfg.get('processing', {}), 'template': template}
 
     model = local_cfg.get('local_llm', {}).get('model', 'local')
+    ch_url = manifest.get('channel_url', '')
     saved = []
     for item in manifest['pending']:
         title        = item.get('title', item['video_id'])
@@ -157,6 +160,7 @@ def _run_local_processing(manifest, cfg):
         url          = item.get('url', '')
         duration     = item.get('duration', '') or ''
         channel      = item.get('channel_name', channel_name)
+        ch_display   = f"[{channel}]({ch_url})" if ch_url else channel
 
         with open(item['transcript_path'], 'r', encoding='utf-8') as f:
             transcript = f.read()
@@ -165,7 +169,7 @@ def _run_local_processing(manifest, cfg):
 
         header = (
             f"# {title}\n\n"
-            f"**채널**: {channel}\n"
+            f"**채널**: {ch_display}\n"
             f"**날짜**: {published_at}\n"
             f"**링크**: {url}\n"
             f"**길이**: {duration}\n\n"
@@ -186,6 +190,7 @@ def _run_claude_processing(manifest, claude_model):
     channel_name = manifest['channel_name']
     template     = manifest['template']
 
+    ch_url = manifest.get('channel_url', '')
     saved = []
     for item in manifest['pending']:
         title        = item.get('title', item['video_id'])
@@ -193,12 +198,13 @@ def _run_claude_processing(manifest, claude_model):
         url          = item.get('url', '')
         duration     = item.get('duration', '') or ''
         channel      = item.get('channel_name', channel_name)
+        ch_display   = f"[{channel}]({ch_url})" if ch_url else channel
 
         result = process_with_claude_cli(item, template, claude_model)
 
         header = (
             f"# {title}\n\n"
-            f"**채널**: {channel}\n"
+            f"**채널**: {ch_display}\n"
             f"**날짜**: {published_at}\n"
             f"**링크**: {url}\n"
             f"**길이**: {duration}\n\n"
@@ -220,6 +226,7 @@ def _run_gemini_processing(manifest, gemini_api_key, gemini_model):
     channel_name = manifest['channel_name']
     template     = manifest['template']
 
+    ch_url = manifest.get('channel_url', '')
     saved = []
     for item in manifest['pending']:
         title        = item.get('title', item['video_id'])
@@ -227,12 +234,13 @@ def _run_gemini_processing(manifest, gemini_api_key, gemini_model):
         url          = item.get('url', '')
         duration     = item.get('duration', '') or ''
         channel      = item.get('channel_name', channel_name)
+        ch_display   = f"[{channel}]({ch_url})" if ch_url else channel
 
         result, used_tier = process_with_gemini(item, template, gemini_api_key, gemini_model)
 
         header = (
             f"# {title}\n\n"
-            f"**채널**: {channel}\n"
+            f"**채널**: {ch_display}\n"
             f"**날짜**: {published_at}\n"
             f"**링크**: {url}\n"
             f"**길이**: {duration}\n\n"
@@ -246,7 +254,7 @@ def _run_gemini_processing(manifest, gemini_api_key, gemini_model):
     return saved
 
 
-def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
+def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL, channel_url=''):
     """영상 목록에서 트랜스크립트를 수집하고 manifest를 저장 (또는 Gemini로 직접 처리)."""
     languages = cfg['youtube'].get('languages', ['ko', 'en'])
     channel_name = videos[0]['channel_name'] if videos else 'unknown'
@@ -259,7 +267,7 @@ def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='clau
         entry, skip = _build_entry(video, languages)
         (pending if entry else skipped).append(entry or skip)
 
-    manifest = _save_manifest(cfg, channel_name, pending, skipped, mode=mode)
+    manifest = _save_manifest(cfg, channel_name, pending, skipped, mode=mode, channel_url=channel_url)
     _print_summary(manifest, skipped, llm=llm)
 
     if llm == 'claude' and pending:
@@ -320,7 +328,7 @@ def run_latest(channel_url, cfg, api_key, mode='heavy', llm='claude', gemini_mod
     if not videos:
         print("모든 최근 영상이 이미 처리되었습니다.")
         return None
-    return _process_video_list(videos, cfg, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model)
+    return _process_video_list(videos, cfg, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model, channel_url=channel_url)
 
 
 def run_range(channel_url, start_date, end_date, cfg, api_key, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
@@ -342,7 +350,7 @@ def run_range(channel_url, start_date, end_date, cfg, api_key, skip_processed=Tr
 
     channel_dir = os.path.join(cfg['output']['base_dir'], sanitize_dirname(videos[0]['channel_name']))
     processed = load_processed(channel_dir) if skip_processed else set()
-    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model)
+    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model, channel_url=channel_url)
 
 
 def run_keyword(channel_url, keyword, cfg, api_key, start_date=None, end_date=None, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
@@ -364,7 +372,61 @@ def run_keyword(channel_url, keyword, cfg, api_key, start_date=None, end_date=No
 
     channel_dir = os.path.join(cfg['output']['base_dir'], sanitize_dirname(videos[0]['channel_name']))
     processed = load_processed(channel_dir) if skip_processed else set()
-    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model)
+    return _process_video_list(videos, cfg, processed_ids=processed, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model, channel_url=channel_url)
+
+
+def run_popular(channel_url, cfg, api_key, top=50, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL):
+    """인기순 상위 N개 영상 처리 + POPULAR.md 인덱스 저장."""
+    logger = logging.getLogger('main')
+    logger.info(f"=== 인기순 TOP {top} [{mode}|{llm}]: {channel_url} ===")
+
+    videos = get_popular_videos(api_key, channel_url, max_results=top)
+    if not videos:
+        print("인기 영상을 가져올 수 없습니다.")
+        return None
+
+    channel_name = videos[0]['channel_name']
+    channel_dir = os.path.join(cfg['output']['base_dir'], sanitize_dirname(channel_name))
+    processed = load_processed(channel_dir) if skip_processed else set()
+
+    manifest = _process_video_list(
+        videos, cfg, processed_ids=processed,
+        mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model,
+        channel_url=channel_url,
+    )
+
+    # POPULAR.md 인덱스 저장
+    today = date.today().isoformat()
+    ch_url = channel_url
+    lines = [
+        f"# {channel_name} 인기 영상순 TOP {top}\n",
+        f"**채널**: [{channel_name}]({ch_url})  ",
+        f"**업데이트**: {today}\n",
+        "| 순위 | 제목 | 링크 |",
+        "|------|------|------|",
+    ]
+    for rank, v in enumerate(videos, 1):
+        title = v['title']
+        yt_url = v['url']
+        # 처리된 파일 찾기
+        slug = re.sub(r'[\\/*?:"<>|]', '_', title).strip().replace(' ', '_')
+        slug = re.sub(r'_+', '_', slug)[:60]
+        pattern = os.path.join(channel_dir, f"{v['published_at']}_{slug}*.md")
+        import glob as _glob
+        matches = _glob.glob(pattern)
+        if matches:
+            rel = os.path.basename(matches[0])
+            link = f"[분석](./{rel})"
+        else:
+            link = f"[YouTube]({yt_url})"
+        lines.append(f"| {rank} | {title} | {link} |")
+
+    popular_path = os.path.join(channel_dir, "POPULAR.md")
+    os.makedirs(channel_dir, exist_ok=True)
+    with open(popular_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    print(f"\nPOPULAR.md 저장: {popular_path}")
+    return manifest
 
 
 def _guess_channel_dir(cfg, channel_url, api_key):
@@ -407,6 +469,8 @@ def build_parser():
     p.add_argument('--start', metavar='YYYY-MM-DD', help='시작일')
     p.add_argument('--end', metavar='YYYY-MM-DD', help='종료일 (기본: 오늘)')
     p.add_argument('--keyword', metavar='KW', help='[모드 3] 키워드 검색')
+    p.add_argument('--popular', action='store_true', help='인기순 상위 영상 처리 + POPULAR.md 생성')
+    p.add_argument('--top', type=int, default=50, metavar='N', help='인기순 상위 N개 (기본 50, --popular 전용)')
     p.add_argument('--all', dest='all_videos', action='store_true',
                    help='[모드 4] 이미 처리된 영상도 포함')
     p.add_argument('--index', action='store_true', help='INDEX.md 재생성')
@@ -472,6 +536,21 @@ def main():
     if not api_key:
         print("오류: .env에 YOUTUBE_API_KEY를 설정하세요.")
         sys.exit(1)
+
+    # ── 인기순
+    if args.popular:
+        run_popular(
+            channel_url=channel,
+            cfg=cfg,
+            api_key=api_key,
+            top=args.top,
+            skip_processed=not args.all_videos,
+            mode=args.mode,
+            llm=args.llm,
+            gemini_model=args.gemini_model,
+            claude_model=args.claude_model,
+        )
+        return
 
     # ── 모드 1: --latest
     if args.latest:
