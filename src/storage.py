@@ -28,11 +28,13 @@ def title_to_slug(title, max_len=60):
     return slug[:max_len]
 
 
-def save_markdown(content, channel_name, date, title, base_dir='./output'):
+def save_markdown(content, channel_name, date, title, base_dir='./output', prefix='', subdir=''):
     channel_dir = os.path.join(base_dir, sanitize_dirname(channel_name))
+    if subdir:
+        channel_dir = os.path.join(channel_dir, subdir)
     os.makedirs(channel_dir, exist_ok=True)
 
-    filename = f"{date}_{title_to_slug(title)}.md"
+    filename = f"{prefix}{date}_{title_to_slug(title)}.md"
     filepath = os.path.join(channel_dir, filename)
 
     with open(filepath, 'w', encoding='utf-8') as f:

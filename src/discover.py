@@ -273,6 +273,7 @@ def get_popular_videos(api_key, channel_url, max_results=50):
             channelId=channel_id,
             type='video',
             order='viewCount',
+            videoDuration='medium',
             maxResults=min(50, max_results - len(videos)),
         )
         if next_page:
@@ -299,6 +300,76 @@ def get_popular_videos(api_key, channel_url, max_results=50):
 
     logger.info(f"인기순 영상: {len(videos)}개")
     return _fetch_durations(youtube, videos[:max_results])
+
+
+def get_popular_videos_by_stats(api_key, channel_url, top=10, scan_limit=200):
+    """업로드 목록 최근 scan_limit개를 통계 기준으로 정렬해 상위 top개를 반환.
+
+    search.list 대신 playlistItems + videos.statistics를 사용해 정확한 조회수 기반 정렬.
+    쇼츠(#쇼츠/#shorts 제목, 또는 1분 미만)는 자동 제외.
+    """
+    youtube = build('youtube', 'v3', developerKey=api_key)
+    _, channel_name, uploads_playlist = _get_channel_info(youtube, channel_url)
+
+    # Step 1: 최근 scan_limit개 영상 목록 수집
+    raw = []
+    next_page = None
+    while len(raw) < scan_limit:
+        kwargs = dict(part='snippet', playlistId=uploads_playlist, maxResults=50)
+        if next_page:
+            kwargs['pageToken'] = next_page
+        resp = youtube.playlistItems().list(**kwargs).execute()
+        for item in resp.get('items', []):
+            snippet = item['snippet']
+            video_id = snippet['resourceId']['videoId']
+            published = datetime.fromisoformat(snippet['publishedAt'].replace('Z', '+00:00'))
+            raw.append({
+                'video_id': video_id,
+                'title': snippet['title'],
+                'published_at': published.strftime('%Y-%m-%d'),
+                'url': f'https://www.youtube.com/watch?v={video_id}',
+                'duration': None,
+                'channel_name': channel_name,
+                'view_count': 0,
+            })
+        next_page = resp.get('nextPageToken')
+        if not next_page:
+            break
+
+    # Step 2: 조회수 + duration 배치 조회 (50개씩)
+    ids = [v['video_id'] for v in raw]
+    info_map = {}
+    for i in range(0, len(ids), 50):
+        batch = ids[i:i + 50]
+        resp = youtube.videos().list(part='statistics,contentDetails', id=','.join(batch)).execute()
+        for item in resp.get('items', []):
+            info_map[item['id']] = {
+                'views':    int(item['statistics'].get('viewCount', 0)),
+                'duration': _parse_duration(item['contentDetails']['duration']),
+            }
+
+    for v in raw:
+        info = info_map.get(v['video_id'], {})
+        v['view_count'] = info.get('views', 0)
+        v['duration']   = info.get('duration', '')
+
+    # Step 3: 쇼츠 제외 후 조회수 내림차순 정렬
+    def _is_shorts(v):
+        title = v.get('title', '')
+        dur   = v.get('duration') or ''
+        if '#쇼츠' in title or '#shorts' in title.lower():
+            return True
+        m = re.match(r'^(?:(\d+):)?(\d+):(\d+)$', dur)
+        if m:
+            h, mn = int(m.group(1) or 0), int(m.group(2))
+            return h == 0 and mn < 1
+        return False
+
+    normals = [v for v in raw if not _is_shorts(v)]
+    normals.sort(key=lambda v: v['view_count'], reverse=True)
+
+    logger.info(f"인기순 영상 (최근 {len(raw)}개 스캔 / 일반 {len(normals)}개): 상위 {top}개 반환")
+    return normals[:top]
 
 
 def get_videos_by_keyword(api_key, channel_url, keyword, start_date=None, end_date=None, max_results=50):

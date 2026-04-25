@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주토피아 위스키 DB — Cask &amp; Codex</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bone: #f7f4ed;
+  --bone-dark: #ede9df;
+  --bottle: #2d5a3d;
+  --bottle-light: #3d7552;
+  --bottle-muted: rgba(45,90,61,0.08);
+  --amber: #c4821a;
+  --amber-light: #f5e8d0;
+  --amber-dark: #a06815;
+  --text: #1a1a14;
+  --text-2: #4a4a42;
+  --text-3: #7a7a6e;
+  --border: rgba(0,0,0,0.08);
+  --card: #ffffff;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.1);
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bone);
+  color: var(--text);
+  -webkit-text-size-adjust: 100%;
+  min-height: 100vh;
+}
+/* ── HEADER ── */
+.site-header {
+  background: var(--bottle);
+  color: #fff;
+  padding: 20px 16px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+}
+.header-inner { max-width: 960px; margin: 0 auto; }
+.site-header h1 {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.site-header .sub {
+  font-size: 0.75rem;
+  opacity: 0.65;
+  margin-top: 2px;
+}
+/* ── FILTER TABS ── */
+.filter-bar {
+  background: var(--bone-dark);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+.filter-bar::-webkit-scrollbar { display: none; }
+.filter-inner { max-width: 960px; margin: 0 auto; display: flex; gap: 6px; }
+.filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--text-2);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.filter-btn.active {
+  background: var(--bottle);
+  border-color: var(--bottle);
+  color: #fff;
+}
+.filter-btn .cnt {
+  background: rgba(255,255,255,0.25);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+}
+.filter-btn:not(.active) .cnt {
+  background: var(--bone-dark);
+  color: var(--text-3);
+}
+/* ── GRID ── */
+.list-view { padding: 16px; max-width: 960px; margin: 0 auto; }
+.sort-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+.sort-bar strong { color: var(--text-2); }
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 540px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 800px) {
+  .grid { grid-template-columns: repeat(3, 1fr); }
+}
+/* ── CARD ── */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.card-top {
+  background: var(--bottle-muted);
+  padding: 12px 12px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.card-rank {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  font-weight: 600;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.score-badge {
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+.score-s { background: var(--amber); color: #fff; }
+.score-a { background: var(--bottle); color: #fff; }
+.score-b { background: #7a9e8a; color: #fff; }
+.score-c { background: #c17864; color: #fff; }
+.card-body { padding: 10px 12px 12px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.card-name {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+}
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip {
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--bottle-muted);
+  color: var(--bottle);
+  font-weight: 600;
+  border: 1px solid rgba(45,90,61,0.15);
+}
+.chip.ko { background: rgba(196,130,26,0.1); color: var(--amber-dark); border-color: rgba(196,130,26,0.2); }
+.chip.japan { background: rgba(100,60,120,0.1); color: #5a3a7a; border-color: rgba(100,60,120,0.2); }
+.card-notes {
+  font-size: 0.78rem;
+  color: var(--text-2);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-quote {
+  font-size: 0.75rem;
+  color: var(--text-3);
+  font-style: italic;
+  border-left: 2px solid var(--amber);
+  padding-left: 8px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* ── DETAIL VIEW ── */
+.detail-view { display: none; }
+.detail-view.active { display: block; }
+.list-view.hidden { display: none; }
+.detail-hero {
+  background: var(--bottle);
+  color: #fff;
+  padding: 20px 16px 24px;
+}
+.detail-hero-inner { max-width: 720px; margin: 0 auto; }
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  margin-bottom: 16px;
+  transition: background 0.15s;
+}
+.back-btn:hover { background: rgba(255,255,255,0.25); }
+.hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hero-text { flex: 1; }
+.hero-rank { font-size: 0.78rem; opacity: 0.6; margin-bottom: 4px; font-weight: 600; }
+.hero-name {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+@media (max-width: 400px) { .hero-name { font-size: 1.25rem; } }
+.hero-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.hero-chip {
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+  padding: 3px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.hero-score {
+  border-radius: 12px;
+  padding: 10px 16px;
+  text-align: center;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+.hero-score .num {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.hero-score .lbl {
+  font-size: 0.65rem;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+/* detail content */
+.detail-body { max-width: 720px; margin: 0 auto; padding: 16px; }
+.section { margin-bottom: 20px; }
+.section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bottle);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+/* quotes */
+.quotes { display: flex; flex-direction: column; gap: 8px; }
+.quote-item {
+  background: var(--amber-light);
+  border-left: 3px solid var(--amber);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 10px 12px;
+  font-style: italic;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+/* flavor bars */
+.flavor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+@media (min-width: 480px) { .flavor-grid { grid-template-columns: repeat(2, 1fr); } }
+.flavor-row { display: flex; flex-direction: column; gap: 3px; }
+.flavor-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-2);
+  font-weight: 500;
+}
+.flavor-val { font-variant-numeric: tabular-nums; color: var(--text-3); }
+.bar-track {
+  height: 7px;
+  background: var(--bone-dark);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--bottle);
+  transition: width 0.4s ease;
+}
+.bar-fill.amber { background: var(--amber); }
+.bar-fill.sage { background: #7a9e8a; }
+/* notes card */
+.notes-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-2);
+  box-shadow: var(--shadow-sm);
+}
+/* bg section */
+.bg-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--text-2);
+  box-shadow: var(--shadow-sm);
+}
+/* verdict */
+.verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.verdict-score-big {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.verdict-text { font-size: 0.83rem; color: var(--text-2); line-height: 1.5; }
+.verdict-tier {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <h1>주토피아 위스키 DB</h1>
+    <div class="sub">인기 영상 #1–#11 · 17종 테이스팅 분석 · Cask &amp; Codex</div>
+  </div>
+</header>
+
+<div class="filter-bar" id="filterBar">
+  <div class="filter-inner">
+    <button class="filter-btn active" data-filter="all" onclick="setFilter(this,'all')">전체 <span class="cnt">17</span></button>
+    <button class="filter-btn" data-filter="스카치" onclick="setFilter(this,'스카치')">스카치 <span class="cnt">12</span></button>
+    <button class="filter-btn" data-filter="일본" onclick="setFilter(this,'일본')">일본 <span class="cnt">1</span></button>
+    <button class="filter-btn" data-filter="한국" onclick="setFilter(this,'한국')">한국 <span class="cnt">3</span></button>
+    <button class="filter-btn" data-filter="S" onclick="setFilter(this,'S')">S 90+ <span class="cnt">4</span></button>
+    <button class="filter-btn" data-filter="A" onclick="setFilter(this,'A')">A 80–89 <span class="cnt">8</span></button>
+    <button class="filter-btn" data-filter="B" onclick="setFilter(this,'B')">B 70–79 <span class="cnt">4</span></button>
+    <button class="filter-btn" data-filter="C" onclick="setFilter(this,'C')">C –70 <span class="cnt">1</span></button>
+  </div>
+</div>
+
+<!-- LIST VIEW -->
+<div class="list-view" id="listView">
+  <div class="sort-bar">
+    <span><strong id="countLabel">17개</strong> 위스키</span>
+    <span>점수 높은 순</span>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<!-- DETAIL VIEW -->
+<div class="detail-view" id="detailView">
+  <div class="detail-hero" id="heroSection">
+    <div class="detail-hero-inner">
+      <button class="back-btn" onclick="goBack()">← 목록으로</button>
+      <div class="hero-row">
+        <div class="hero-text">
+          <div class="hero-rank" id="dRank"></div>
+          <div class="hero-name" id="dName"></div>
+          <div class="hero-chips" id="dChips"></div>
+        </div>
+        <div class="hero-score score-s" id="dScore">
+          <div class="num" id="dScoreNum"></div>
+          <div class="lbl">/ 100</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="detail-body">
+    <div class="section">
+      <div class="section-title">호스트 직접 발언</div>
+      <div class="quotes" id="dQuotes"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">테이스팅 프로필</div>
+      <div class="flavor-grid" id="dFlavors"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">추정 테이스팅 노트</div>
+      <div class="notes-card" id="dNotes"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">위스키 배경</div>
+      <div class="bg-card" id="dBg"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">최종 평가</div>
+      <div class="verdict-row">
+        <div class="verdict-score-big" id="vScoreBig"></div>
+        <div>
+          <div class="verdict-tier" id="vTier"></div>
+          <div class="verdict-text" id="vText"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WHISKIES = [
+  {
+    rank: 1,
+    name: "히비키 21년 화조풍월",
+    nameEn: "Hibiki 21Y Kacho Fugetsu",
+    score: 96,
+    type: "일본",
+    subtype: "블렌디드",
+    origin: "일본 산토리",
+    quotes: [
+      '"졸라 맛있어"',
+      '"끝맛이 너무 이쁘게 나왔다"',
+      '"꿀 허브 플로럴 다 들어있고"',
+      '"면세 원픽 — 이거 하나면 됩니다"'
+    ],
+    notes: "꿀·허브·플로럴 트리오, 미즈나라 오크의 백단향, 살짝 스모키한 레이어, 긴 우아한 여운. 달콤하되 무겁지 않고, 각 노트가 조화롭게 겹쳐지는 완성도.",
+    bg: "산토리 블렌디드. 21년 이상 원액. 미즈나라 오크 피니시. 화조풍월 에디션은 면세 한정 특별 출시. 현재 단종되어 희귀화됨.",
+    flavor: { 달콤함:9, 과일향:8, 셰리:5, 피트:3, 오크:6, 스파이스:4, 플로럴:9, 바디감:7 },
+    verdict: "면세 원픽 그 자체. 지금은 구하기 어렵지만 만약 만난다면 주저 없이 구입."
+  },
+  {
+    rank: 2,
+    name: "글렌알라키 CS (Batch 3–5)",
+    nameEn: "GlenAllachie CS",
+    score: 93,
+    type: "스카치",
+    subtype: "셰리",
+    origin: "스페이사이드",
+    quotes: [
+      '"해외 사이트 평이 제일 좋습니다"',
+      '"인생 위스키"',
+      '"빌리 형의 마음이 들어있네요"',
+      '"배치마다 맛이 많이 달라서 놀랐어요"'
+    ],
+    notes: "풍부한 셰리 달콤함, 건포도·자두·다크 초콜릿, 밀크 초콜릿 레이어, 오크 스파이스, 배치별 미세 변주. 글로벌 최고 평점군의 CS답게 무겁되 꽉 찬 복합도.",
+    bg: "스페이사이드. Billy Walker 마스터 블렌더 창업. CS(Cask Strength) = 블렌더 철학의 집약판. 배치 3~5 모두 인기. 글로벌 위스키 평점 최상위권.",
+    flavor: { 달콤함:9, 과일향:7, 셰리:10, 피트:2, 오크:6, 스파이스:5, 플로럴:4, 바디감:8 },
+    verdict: "국제적 최고 평가 + 합리적 가격. 셰리 스타일 입문부터 마니아까지 모두 추천."
+  },
+  {
+    rank: 3,
+    name: "글렌리벳 200주년 퍼필 아메리칸 오크",
+    nameEn: "Glenlivet 200th Anniv. First Fill American Oak",
+    score: 92,
+    type: "스카치",
+    subtype: "아메리칸 오크",
+    origin: "스페이사이드",
+    quotes: [
+      '"굉장히 달큰한 망고 파인애플 향"',
+      '"대놓고 나와요, 과일 과일합니다"',
+      '"오일리한 텍스처"',
+      '"차원이 다른 수리야"'
+    ],
+    notes: "망고·파인애플 주도, 복숭아·사과·배 베이스, 오일리 미드팔레이트, 감초 같은 피니시. 퍼필 아메리칸 오크의 교과서적 과일 폭발.",
+    bg: "글렌리벳 200주년 기념 한정 출시. 43도. 퍼필(첫 번째 사용) 아메리칸 오크. 2024년 1월 일본 즉시 품절. 한국 미발매.",
+    flavor: { 달콤함:8, 과일향:10, 셰리:2, 피트:1, 오크:6, 스파이스:3, 플로럴:5, 바디감:7 },
+    verdict: "글렌리벳이 이렇게 되나 싶은 반전. 과일 위스키의 정점. 한국 발매 시 즉시 구입 추천."
+  },
+  {
+    rank: 4,
+    name: "킹조지5세",
+    nameEn: "King George V",
+    score: 91,
+    type: "스카치",
+    subtype: "블렌디드/셰리",
+    origin: "조니워커 앤 선즈",
+    quotes: [
+      '"이게 바로 스카치 위스키야"',
+      '"조니블루 뺨따구 때리는"',
+      '"피트도 되게 고급스럽고"',
+      '"블루보다 다섯 배의 맛"'
+    ],
+    notes: "고급스러운 피트, 장미·꽃향, 셰리 꾸덕·구수함, 날카로움 없는 완성형. 온더락 시 셰리와 피트의 균형이 돋보이며 음용성이 높음.",
+    bg: "조니워커 앤 선즈 한정 라인. 1900년대 초 왕실 워런트 기념. 포트알라인·로크나가·모틀락 키몰트. 블루 4~5배 가격. 면세 전용.",
+    flavor: { 달콤함:7, 과일향:6, 셰리:8, 피트:7, 오크:6, 스파이스:5, 플로럴:7, 바디감:8 },
+    verdict: "억울한 명품. 블루와 비교되어 저평가됐지만 재발견하면 '이게 진짜지' 반응. 면세점 최우선 후보."
+  },
+  {
+    rank: 5,
+    name: "스프링뱅크 10년 2023",
+    nameEn: "Springbank 10 2023",
+    score: 89,
+    type: "스카치",
+    subtype: "버번/셰리 혼합",
+    origin: "캠벨타운",
+    quotes: [
+      '"이게 바로 스의 맛이지"',
+      '"술술 들어가네"',
+      '"복숭아 같은 계열 뉘앙스"',
+      '"욕을 안 먹습니다"'
+    ],
+    notes: "우드, 복숭아·석과류, 가벼운 셰리, 바닐라, 짠맛 약간. 모든 노트가 중도적 밸런스를 지키며 어느 스타일 팬도 거부감 없이 즐길 수 있음.",
+    bg: "캠벨타운. 46%. 버번 캐스크 + 셰리 캐스크 혼합. 1년 3~4회 소량 수입. 구하기 어려운 극희귀. 1987년 공장 재가동 이후 명성 회복.",
+    flavor: { 달콤함:6, 과일향:6, 셰리:5, 피트:5, 오크:6, 스파이스:5, 플로럴:4, 바디감:6 },
+    verdict: "스프링뱅크 입문. 구하면 바로 사야 하는 위스키. 균형의 정석."
+  },
+  {
+    rank: 6,
+    name: "케이런헤드 세븐스타 30년",
+    nameEn: "Cadenhead Seven Star 30Y",
+    score: 87,
+    type: "스카치",
+    subtype: "블렌디드",
+    origin: "캠벨타운",
+    quotes: [
+      '"향이 살아 있네"',
+      '"존나 달달하네"'
+    ],
+    notes: "풍부한 달콤함, 생동감 있는 향. 30년 숙성이 주는 깊이감. 발언이 적어 세부 프로필은 제한적이나 감탄 반응이 분명.",
+    bg: "캠벨타운 케이런헤드 블렌디드 시리즈. 30년 장기 숙성. QnA 영상 중 직접 시음된 위스키로 비교적 짧은 언급이지만 명확한 호평.",
+    flavor: { 달콤함:8, 과일향:6, 셰리:6, 피트:3, 오크:7, 스파이스:5, 플로럴:4, 바디감:7 },
+    verdict: "30년의 무게감이 느껴지는 순간. 한 모금으로 명확한 감탄을 이끌어내는 위스키."
+  },
+  {
+    rank: 6,
+    name: "조니블루 캐스크 에디션 55.8°",
+    nameEn: "Johnnie Walker Blue Cask Edition 55.8%",
+    score: 87,
+    type: "스카치",
+    subtype: "블렌디드",
+    origin: "스코틀랜드",
+    quotes: [
+      '"블루를 존나 농축한 맛"',
+      '"오일이 입에서 이름 바르듯 쫙 발라져"',
+      '"피니시 엄청 길어"',
+      '"니트가 훨씬 낫다"'
+    ],
+    notes: "농축된 블루 향미, 강한 오일리함, 긴 여운, 스파이스, 과실. 55.8도에서 오는 강도감을 통해 블루의 본 모습을 재조명.",
+    bg: "55.8도 면세 전용 한정판. 논칠필터드(냉각여과 없음). 넘버링 버전. 가수 없이 마시는 것이 더 좋다는 평.",
+    flavor: { 달콤함:7, 과일향:6, 셰리:4, 피트:5, 오크:7, 스파이스:7, 플로럴:4, 바디감:9 },
+    verdict: "블루를 아는 사람이 그 진면목을 보고 싶을 때. 니트로 마셔야 제맛."
+  },
+  {
+    rank: 8,
+    name: "김창수 위스키 1호",
+    nameEn: "Kim Chang-su Whisky No.1",
+    score: 86,
+    type: "한국",
+    subtype: "싱글몰트",
+    origin: "대한민국",
+    quotes: [
+      '"피트가 쫙 올라오고 빡세"',
+      '"노즈 되게 훌륭하고 럭셔리"',
+      '"PX의 전형적인 맛"',
+      '"1.2년 숙성인데 특성이 재빨리 잡힌 게 신기하다"'
+    ],
+    notes: "강한 피트 (노즈), PX 셰리 달콤함, 우디 여운, 짧은 숙성 대비 인상적인 구조감. 한국 최초 민간 단식증류기 싱글몰트.",
+    bg: "한국 최초 민간 단식증류기 싱글몰트. 김창수 명인. PX 셰리캐스크. 1.2년 숙성. 54.1도 싱글캐스크 출시. 2022년 4월 긴급 리뷰.",
+    flavor: { 달콤함:6, 과일향:4, 셰리:8, 피트:8, 오크:5, 스파이스:6, 플로럴:3, 바디감:7 },
+    verdict: "한국 위스키의 가능성을 보여준 역사적 한 병. 짧은 숙성을 PX 선택으로 극복한 영리한 접근."
+  },
+  {
+    rank: 9,
+    name: "조니워커 블랙 구형 (1970–80s)",
+    nameEn: "Johnnie Walker Black Label Vintage",
+    score: 85,
+    type: "스카치",
+    subtype: "블렌디드",
+    origin: "스코틀랜드",
+    quotes: [
+      '"구관이 명관이다"',
+      '"현행이랑 확실히 다르네요"'
+    ],
+    notes: "두드러진 스모키, 강한 탄닌, 복합도 높음, 현행보다 볼륨감 강함. 70~80년대 시대의 스카치 특성 그대로.",
+    bg: "1820년 창업 조니워커 블랙 40~46% 구형 라인. 올드 바틀 컬렉터 시장에서 높은 평가. 현행 대비 레시피·원액 선정이 다름.",
+    flavor: { 달콤함:5, 과일향:5, 셰리:5, 피트:8, 오크:7, 스파이스:7, 플로럴:3, 바디감:7 },
+    verdict: "올드 바틀의 진가. 박진감 있는 스모키한 스카치를 경험하고 싶다면 이 시대 바틀이 답."
+  },
+  {
+    rank: 10,
+    name: "화요 53도",
+    nameEn: "Hwayo 53%",
+    score: 84,
+    type: "한국",
+    subtype: "무숙성 스피릿",
+    origin: "대한민국 광주요",
+    quotes: [
+      '"진짜 깔끔합니다"',
+      '"플로랄하고 가벼운 꽃향"',
+      '"일본 위스키에 견주어도 전혀 꿀리지 않는 향"',
+      '"얘가 이겼습니다"'
+    ],
+    notes: "플로럴, 깔끔한 쌀 특성, 바디감, 스모키 약간, 온더락 시 단맛·고소함 상승. XP와의 비교에서 완승.",
+    bg: "광주요. 53도 무숙성. 누룩 불사용. 면세 60불. 화요 XP 41도와 직접 비교 시 완승. 숙성 없이 스피릿 자체의 완성도로 승부.",
+    flavor: { 달콤함:6, 과일향:4, 셰리:0, 피트:2, 오크:2, 스파이스:3, 플로럴:7, 바디감:6 },
+    verdict: "한국 스피릿의 진정한 경쟁력. 면세 60불에 이 수준이면 글로벌 견주어도 손색 없음."
+  },
+  {
+    rank: 11,
+    name: "스프링뱅크 15년 2023",
+    nameEn: "Springbank 15 2023",
+    score: 83,
+    type: "스카치",
+    subtype: "셰리",
+    origin: "캠벨타운",
+    quotes: [
+      '"마른 과일 향 많이 남"',
+      '"셰리 마우스필 줄어듦"',
+      '"에어링 필요"',
+      '"밸런스 안 맞는 거 같은데"'
+    ],
+    notes: "마른 과일, 중숙 셰리, 포트 5%, 약간 불균형, 에어링 후 개선 기대. 10년보다 오히려 아쉬운 2023 빈티지.",
+    bg: "캠벨타운. 46%. 포트와인 5% 추가(비공식 확인). 셰리 과잉 보정 시도. 2023 릴리즈 기준 10년 대비 아쉽다는 평가.",
+    flavor: { 달콤함:7, 과일향:7, 셰리:7, 피트:4, 오크:6, 스파이스:4, 플로럴:4, 바디감:7 },
+    verdict: "2023 빈티지 한정 아쉬움. 다음 릴리즈 기대 유지. 구하면 에어링 충분히 주고 마실 것."
+  },
+  {
+    rank: 12,
+    name: "조니블루 우마미 43°",
+    nameEn: "Johnnie Walker Blue Label Umami",
+    score: 81,
+    type: "스카치",
+    subtype: "블렌디드/셰리",
+    origin: "스코틀랜드",
+    quotes: [
+      '"미티 모틀락 같은 냄새"',
+      '"미역국 고기국 소고기 콘소메"',
+      '"느끼하다"',
+      '"동양인은 별로, 외국인은 좋아할 것 같다"'
+    ],
+    notes: "육수·감칠맛, 크리미, 버터스카치, 무거운 셰리, 후추. 시트러스 없음. 음식 페어링 컨셉 위스키.",
+    bg: "미슐랭 3스타 셰프 Kobayashi + Emma Walker 콜라보. 43도. 음식 페어링 컨셉. 2024년 한정. 매우 개성 강한 스타일.",
+    flavor: { 달콤함:6, 과일향:3, 셰리:8, 피트:4, 오크:6, 스파이스:6, 플로럴:2, 바디감:8 },
+    verdict: "호불호 극명. 요리와 함께라면 새로운 경험. 단독 시음에는 비추."
+  },
+  {
+    rank: 13,
+    name: "로얄살루트 32년",
+    nameEn: "Royal Salute 32",
+    score: 80,
+    type: "스카치",
+    subtype: "블렌디드",
+    origin: "스코틀랜드 페르노리카",
+    quotes: [
+      '"훨씬 과실하다"',
+      '"향 진짜 만족스럽습니다"',
+      '"물비린내가 올라오네"',
+      '"얼음 넣으면 화장품 향이 확 난다"'
+    ],
+    notes: "복숭아·사과·배 과실 포워드, 올드 향, 스모키 미미. 냉각·시간 경과 시 화장품향·물비린내. 온도에 매우 민감.",
+    bg: "페르노리카 하이엔드. 40도. 글렌리벳+스트라사일라 키몰트. 인천공항 면세 290불. 온도 관리가 관건인 위스키.",
+    flavor: { 달콤함:7, 과일향:8, 셰리:4, 피트:2, 오크:6, 스파이스:4, 플로럴:4, 바디감:6 },
+    verdict: "290불이라는 가격이 아쉬운 순간들. 향은 좋지만 온도와 조건을 잘 맞춰야 가격에 납득."
+  },
+  {
+    rank: 14,
+    name: "조니워커 블랙 현행",
+    nameEn: "Johnnie Walker Black Label Current",
+    score: 79,
+    type: "스카치",
+    subtype: "블렌디드",
+    origin: "스코틀랜드",
+    quotes: [
+      '"(트랜스크립트 불완전)"',
+      '"구형에 비해 아쉬운"'
+    ],
+    notes: "스모키, 달콤한 과실, 몰트, 오크, 얕아진 복합도. 구형 대비 볼륨감과 복합성이 줄어든 현행 레시피.",
+    bg: "1820년 창업. 세계 최다 판매 블렌디드. 12년 이상 숙성. 40%. 구형과의 비교에서 아쉬운 현행 레시피 평가.",
+    flavor: { 달콤함:6, 과일향:6, 셰리:4, 피트:5, 오크:6, 스파이스:5, 플로럴:3, 바디감:6 },
+    verdict: "입문용 스카치로는 여전히 우수하나 구형을 아는 사람에게는 아쉬운 현행."
+  },
+  {
+    rank: 15,
+    name: "글렌리벳 12년 정규",
+    nameEn: "Glenlivet 12",
+    score: 78,
+    type: "스카치",
+    subtype: "버번",
+    origin: "스페이사이드",
+    quotes: [
+      '"배 사과 가벼운 향"',
+      '"경쾌한 맛"',
+      '"별로 딥하지도 않고 깊지도 않고"'
+    ],
+    notes: "사과·배, 부드러운 바닐라, 가벼운 바디, 깔끔한 피니시. 입문용 교과서적 스페이사이드.",
+    bg: "스페이사이드. 40도. 한국·일본에서 가장 많이 팔린 싱글몰트 중 하나. 싱글몰트 입문의 대명사.",
+    flavor: { 달콤함:6, 과일향:7, 셰리:2, 피트:1, 오크:5, 스파이스:3, 플로럴:5, 바디감:5 },
+    verdict: "위스키 입문자의 첫 번째 병. 프리미엄을 기대하면 실망이지만 제 역할에는 충실."
+  },
+  {
+    rank: 15,
+    name: "스프링뱅크 18년 2023",
+    nameEn: "Springbank 18 2023",
+    score: 78,
+    type: "스카치",
+    subtype: "셰리",
+    origin: "캠벨타운",
+    quotes: [
+      '"단맛이 너무 빡 치고 온다"',
+      '"꾸겨진 맛"',
+      '"럼 10%만 썼어야"',
+      '"2023 릴리즈는 좀 실패"'
+    ],
+    notes: "과도한 단맛, 럼+포트 과잉, 셰리 기반, 불균형한 복합성. 캐스크 비율이 지나쳐 개성보다 혼란.",
+    bg: "캠벨타운. 46%. 셰리65%+포트20%+럼15% 배합. 2023 빈티지 한정 평가. 럼 캐스크 비중이 화제.",
+    flavor: { 달콤함:9, 과일향:6, 셰리:8, 피트:4, 오크:6, 스파이스:5, 플로럴:3, 바디감:7 },
+    verdict: "스프링뱅크를 좋아하는 사람도 이 빈티지는 '기대 이하'. 다음 릴리즈를 기다리는 것이 현명."
+  },
+  {
+    rank: 17,
+    name: "화요 XP 41도 (숙성)",
+    nameEn: "Hwayo XP 41%",
+    score: 63,
+    type: "한국",
+    subtype: "숙성 스피릿",
+    origin: "대한민국 광주요",
+    quotes: [
+      '"나무 맛이 지배적"',
+      '"복잡한 맛이 없어"',
+      '"실망이다"'
+    ],
+    notes: "바닐라·카라멜, 과도한 우드, 단순함, 미성숙 숙성. 53도가 보여준 가능성이 숙성으로 오히려 훼손된 케이스.",
+    bg: "100% 쌀. 오크통 숙성(추정 1~2년). 41도. 면세 100~120불. 53도 대비 2배 가격에 완패. 단기 숙성의 한계를 보여주는 사례.",
+    flavor: { 달콤함:5, 과일향:4, 셰리:2, 피트:1, 오크:9, 스파이스:3, 플로럴:3, 바디감:5 },
+    verdict: "100~120불을 내기 어렵다. 같은 시리즈 53도를 60불에 마시는 것이 현명한 선택."
+  }
+];
+
+// ── helpers ────────────────────────────────────────────────
+function scoreTier(s) {
+  if (s >= 90) return 'S';
+  if (s >= 80) return 'A';
+  if (s >= 70) return 'B';
+  return 'C';
+}
+function scoreClass(s) { return 'score-' + scoreTier(s).toLowerCase(); }
+function tierLabel(s) {
+  if (s >= 90) return 'S티어 — 최상위';
+  if (s >= 80) return 'A티어 — 우수';
+  if (s >= 70) return 'B티어 — 평균 이상';
+  return 'C티어 — 아쉬움';
+}
+function typeChipClass(type) {
+  if (type === '일본') return 'chip japan';
+  if (type === '한국') return 'chip ko';
+  return 'chip';
+}
+function barColor(key) {
+  if (['달콤함','과일향','플로럴'].includes(key)) return 'amber';
+  if (['피트'].includes(key)) return 'sage';
+  return '';
+}
+
+let currentFilter = 'all';
+
+function filtered() {
+  return WHISKIES.filter(w => {
+    if (currentFilter === 'all') return true;
+    if (currentFilter === 'S') return scoreTier(w.score) === 'S';
+    if (currentFilter === 'A') return scoreTier(w.score) === 'A';
+    if (currentFilter === 'B') return scoreTier(w.score) === 'B';
+    if (currentFilter === 'C') return scoreTier(w.score) === 'C';
+    return w.type.includes(currentFilter);
+  });
+}
+
+function setFilter(btn, f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderGrid();
+}
+
+function renderGrid() {
+  const list = filtered();
+  document.getElementById('countLabel').textContent = list.length + '개';
+  const grid = document.getElementById('grid');
+  grid.innerHTML = list.map(w => `
+    <div class="card" onclick="openDetail(${WHISKIES.indexOf(w)})">
+      <div class="card-top">
+        <div class="card-rank">#${w.rank} 인기</div>
+        <div class="score-badge ${scoreClass(w.score)}">${w.score}</div>
+      </div>
+      <div class="card-body">
+        <div class="card-name">${w.name}</div>
+        <div class="chips">
+          <span class="${typeChipClass(w.type)}">${w.type}</span>
+          <span class="chip">${w.subtype}</span>
+          <span class="chip">${w.origin.split(' ')[0]}</span>
+        </div>
+        <div class="card-notes">${w.notes}</div>
+        <div class="card-quote">${w.quotes[0]}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openDetail(idx) {
+  const w = WHISKIES[idx];
+  // hero
+  document.getElementById('dRank').textContent = '#' + w.rank + ' 인기 · ' + w.origin;
+  document.getElementById('dName').textContent = w.name;
+  document.getElementById('dChips').innerHTML =
+    `<span class="hero-chip">${w.type}</span><span class="hero-chip">${w.subtype}</span>`;
+  const scoreEl = document.getElementById('dScore');
+  scoreEl.className = 'hero-score ' + scoreClass(w.score);
+  document.getElementById('dScoreNum').textContent = w.score;
+  // quotes
+  document.getElementById('dQuotes').innerHTML = w.quotes
+    .map(q => `<div class="quote-item">${q}</div>`).join('');
+  // flavors
+  const flavorKeys = Object.keys(w.flavor);
+  document.getElementById('dFlavors').innerHTML = flavorKeys.map(k => `
+    <div class="flavor-row">
+      <div class="flavor-label"><span>${k}</span><span class="flavor-val">${w.flavor[k]}/10</span></div>
+      <div class="bar-track"><div class="bar-fill ${barColor(k)}" style="width:${w.flavor[k]*10}%"></div></div>
+    </div>
+  `).join('');
+  // notes + bg
+  document.getElementById('dNotes').textContent = w.notes;
+  document.getElementById('dBg').textContent = w.bg;
+  // verdict
+  document.getElementById('vScoreBig').textContent = w.score;
+  document.getElementById('vScoreBig').style.color = w.score >= 90 ? 'var(--amber)' : w.score >= 80 ? 'var(--bottle)' : w.score >= 70 ? '#7a9e8a' : '#c17864';
+  document.getElementById('vTier').textContent = tierLabel(w.score);
+  document.getElementById('vText').textContent = w.verdict;
+  // show/hide
+  document.getElementById('listView').classList.add('hidden');
+  document.getElementById('filterBar').style.display = 'none';
+  document.getElementById('detailView').classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function goBack() {
+  document.getElementById('detailView').classList.remove('active');
+  document.getElementById('listView').classList.remove('hidden');
+  document.getElementById('filterBar').style.display = '';
+}
+
+// init
+renderGrid();
+</script>
+</body>
+</html>
