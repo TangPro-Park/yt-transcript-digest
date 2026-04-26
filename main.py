@@ -73,12 +73,18 @@ def load_config(path='./config.yaml'):
 def _build_entry(video, languages, run_id=None):
     """트랜스크립트 fetch 후 pending 항목 반환. 실패 시 (None, video) 반환."""
     metadata = {
-        'video_id':     video['video_id'],
-        'title':        video.get('title', ''),
-        'channel_name': video.get('channel_name', ''),
-        'published_at': video.get('published_at', ''),
-        'duration':     video.get('duration', ''),
-        'url':          video.get('url', ''),
+        'video_id':          video['video_id'],
+        'title':             video.get('title', ''),
+        'channel_name':      video.get('channel_name', ''),
+        'published_at':      video.get('published_at', ''),
+        'duration':          video.get('duration', ''),
+        'url':               video.get('url', ''),
+        'description':       video.get('description', ''),
+        'tags':              video.get('tags', []),
+        'chapters':          video.get('chapters', []),
+        'view_count':        video.get('view_count', 0),
+        'like_count':        video.get('like_count', 0),
+        'topic_categories':  video.get('topic_categories', []),
     }
     channel_name = video.get('channel_name', 'unknown')
     cache_dir = os.path.join(TRANSCRIPT_CACHE_DIR, sanitize_dirname(channel_name))
