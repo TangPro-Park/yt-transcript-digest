@@ -15,13 +15,7 @@ logger = logging.getLogger(__name__)
 
 PENDING_PATH = './cache/pending.json'
 
-TEMPLATES = {
-    'heavy':         './templates/deep_analysis.md',
-    'medium':        './templates/medium_summary.md',
-    'compact':       './templates/compact.md',
-    'compact_local': './templates/compact_local.md',
-    'shorts':        './templates/shorts.md',
-}
+from src.constants import TEMPLATES
 
 
 def _already_digested_with_mode(entry, mode):

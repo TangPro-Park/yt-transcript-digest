@@ -38,6 +38,7 @@ from src.discover import (
     get_latest_unprocessed,
     get_videos_by_keyword,
     get_popular_videos,
+    get_popular_videos_by_stats,
 )
 from src.storage import generate_index, load_processed, mark_processed, sanitize_dirname, save_markdown
 from src.transcript import CACHE_DIR as TRANSCRIPT_CACHE_DIR, fetch_transcript
@@ -99,13 +100,7 @@ def _build_entry(video, languages, run_id=None):
     return video, None
 
 
-TEMPLATES = {
-    'heavy':         './templates/deep_analysis.md',
-    'medium':        './templates/medium_summary.md',
-    'compact':       './templates/compact.md',
-    'compact_local': './templates/compact_local.md',
-    'shorts':        './templates/shorts.md',
-}
+from src.constants import TEMPLATES  # noqa: E402 — 모드↔템플릿 매핑 (단일 원본)
 
 
 def _save_manifest(cfg, channel_name, pending, skipped, mode='heavy', channel_url='', subdir=''):
@@ -290,6 +285,9 @@ def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='clau
     languages = cfg['youtube'].get('languages', ['ko', 'en'])
     channel_name = videos[0]['channel_name'] if videos else 'unknown'
 
+    # 키워드 필터링 (config.yaml의 filter.skip_keywords)
+    skip_keywords = cfg.get('filter', {}).get('skip_keywords', [])
+
     run_id = fetch_runs.make_run_id(kind) if kind else None
 
     pending, skipped = [], []
@@ -298,6 +296,13 @@ def _process_video_list(videos, cfg, processed_ids=None, mode='heavy', llm='clau
         if processed_ids and video['video_id'] in processed_ids:
             logging.getLogger('main').info(f"스킵 (이미 처리됨): {video['title']}")
             continue
+        # 키워드 필터링
+        if skip_keywords:
+            title_lower = video.get('title', '').lower()
+            matched_kw = next((kw for kw in skip_keywords if kw.lower() in title_lower), None)
+            if matched_kw:
+                logging.getLogger('main').info(f"스킵 (필터 키워드 '{matched_kw}'): {video['title']}")
+                continue
         attempted_ids.append(video['video_id'])
         entry, skip = _build_entry(video, languages, run_id=run_id)
         (pending if entry else skipped).append(entry or skip)
@@ -369,22 +374,22 @@ def run_single(video_url, cfg, api_key=None, mode='heavy', llm='claude', gemini_
     )
 
 
-def run_latest(channel_url, cfg, api_key, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL, fetch_only=False):
-    """모드 1: 채널의 가장 최근 미처리 영상 1개."""
+def run_latest(channel_url, cfg, api_key, count=1, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL, fetch_only=False):
+    """모드 1: 채널의 가장 최근 미처리 영상 N개."""
     logger = logging.getLogger('main')
-    logger.info(f"=== 최신 미처리 영상 조회 [{mode}|{llm}]: {channel_url} ===")
+    logger.info(f"=== 최신 미처리 영상 {count}개 조회 [{mode}|{llm}]: {channel_url} ===")
 
     channel_dir = _guess_channel_dir(cfg, channel_url, api_key)
     processed = load_processed(channel_dir)
 
-    videos = get_latest_unprocessed(api_key, channel_url, processed)
+    videos = get_latest_unprocessed(api_key, channel_url, processed, count=count)
     if not videos:
         print("모든 최근 영상이 이미 처리되었습니다.")
         return None
     return _process_video_list(
         videos, cfg, mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model,
         channel_url=channel_url, fetch_only=fetch_only,
-        kind='latest', run_params={},
+        kind='latest', run_params={'count': count},
     )
 
 
@@ -442,12 +447,20 @@ def run_keyword(channel_url, keyword, cfg, api_key, start_date=None, end_date=No
     )
 
 
-def run_popular(channel_url, cfg, api_key, top=50, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL, fetch_only=False):
-    """인기순 상위 N개 영상 처리 + POPULAR.md 인덱스 저장."""
-    logger = logging.getLogger('main')
-    logger.info(f"=== 인기순 TOP {top} [{mode}|{llm}]: {channel_url} ===")
+def run_popular(channel_url, cfg, api_key, top=50, skip_processed=True, mode='heavy', llm='claude', gemini_model='pro', claude_model=CLAUDE_DEFAULT_MODEL, fetch_only=False, use_stats=False):
+    """인기순 상위 N개 영상 처리 + POPULAR.md 인덱스 저장.
 
-    videos = get_popular_videos(api_key, channel_url, max_results=top)
+    use_stats=True: get_popular_videos_by_stats() 사용 (정확한 조회수 + 쇼츠 필터).
+    use_stats=False: 기존 search.list 방식 유지.
+    """
+    logger = logging.getLogger('main')
+    method = 'stats-scan' if use_stats else 'search'
+    logger.info(f"=== 인기순 TOP {top} [{mode}|{llm}|{method}]: {channel_url} ===")
+
+    if use_stats:
+        videos = get_popular_videos_by_stats(api_key, channel_url, top=top)
+    else:
+        videos = get_popular_videos(api_key, channel_url, max_results=top)
     if not videos:
         print("인기 영상을 가져올 수 없습니다.")
         return None
@@ -460,13 +473,15 @@ def run_popular(channel_url, cfg, api_key, top=50, skip_processed=True, mode='he
         videos, cfg, processed_ids=processed,
         mode=mode, llm=llm, gemini_model=gemini_model, claude_model=claude_model,
         channel_url=channel_url, fetch_only=fetch_only,
-        kind='popular', run_params={'top': top, 'skip_processed': skip_processed},
+        kind='popular', run_params={'top': top, 'skip_processed': skip_processed, 'use_stats': use_stats},
         subdir='인기',
     )
 
     # POPULAR.md 인덱스 저장
+    import glob as _glob
     today = date.today().isoformat()
     ch_url = channel_url
+    inki_dir = os.path.join(channel_dir, '인기')
     lines = [
         f"# {channel_name} 인기 영상순 TOP {top}\n",
         f"**채널**: [{channel_name}]({ch_url})  ",
@@ -477,16 +492,17 @@ def run_popular(channel_url, cfg, api_key, top=50, skip_processed=True, mode='he
     for rank, v in enumerate(videos, 1):
         title = v['title']
         yt_url = v['url']
-        # 처리된 파일 찾기
+        # 처리된 파일 찾기 (채널 루트 + 인기/ 서브디렉터리 모두 탐색)
         slug = re.sub(r'[\\/*?:"<>|]', '_', title).strip().replace(' ', '_')
         slug = re.sub(r'_+', '_', slug)[:60]
-        import glob as _glob
         matches = (
+            _glob.glob(os.path.join(inki_dir, f"{v['published_at']}_{slug}*.md")) or
+            _glob.glob(os.path.join(inki_dir, f"(쇼츠)_{v['published_at']}_{slug}*.md")) or
             _glob.glob(os.path.join(channel_dir, f"{v['published_at']}_{slug}*.md")) or
             _glob.glob(os.path.join(channel_dir, f"(쇼츠)_{v['published_at']}_{slug}*.md"))
         )
         if matches:
-            rel = os.path.basename(matches[0])
+            rel = os.path.relpath(matches[0], channel_dir).replace(os.sep, '/')
             link = f"[분석](./{rel})"
         else:
             link = f"[YouTube]({yt_url})"
@@ -536,12 +552,15 @@ def build_parser():
     p.add_argument('--channel', metavar='URL', help='채널 URL (모드 1~4)')
     p.add_argument('--mode', choices=['heavy', 'medium', 'compact', 'compact_local', 'shorts'], default='heavy',
                    help='정리 모드: heavy=심층분석(기본), medium=줄거리파악, compact=압축요약, shorts=화자분리 전문(쇼츠 전용)')
-    p.add_argument('--latest', action='store_true', help='[모드 1] 최신 미처리 영상 1개')
+    p.add_argument('--latest', nargs='?', type=int, const=1, default=None, metavar='N',
+                   help='[모드 1] 최신 미처리 영상. N 미지정 시 1개, --latest 5 → 5개')
     p.add_argument('--start', metavar='YYYY-MM-DD', help='시작일')
     p.add_argument('--end', metavar='YYYY-MM-DD', help='종료일 (기본: 오늘)')
     p.add_argument('--keyword', metavar='KW', help='[모드 3] 키워드 검색')
-    p.add_argument('--popular', action='store_true', help='인기순 상위 영상 처리 + POPULAR.md 생성')
-    p.add_argument('--top', type=int, default=50, metavar='N', help='인기순 상위 N개 (기본 50, --popular 전용)')
+    p.add_argument('--popular', action='store_true', help='인기순 상위 영상 처리 + POPULAR.md 생성 (search.list 방식)')
+    p.add_argument('--popular-scan', dest='popular_scan', action='store_true',
+                   help='인기순 상위 영상 (통계 기반 정확 정렬 + 쇼츠 자동 제외)')
+    p.add_argument('--top', type=int, default=50, metavar='N', help='인기순 상위 N개 (기본 50, --popular/--popular-scan 전용)')
     p.add_argument('--all', dest='all_videos', action='store_true',
                    help='[모드 4] 이미 처리된 영상도 포함')
     p.add_argument('--index', action='store_true', help='INDEX.md 재생성')
@@ -669,7 +688,7 @@ def main():
         sys.exit(1)
 
     # ── 인기순
-    if args.popular:
+    if args.popular or args.popular_scan:
         run_popular(
             channel_url=channel,
             cfg=cfg,
@@ -681,12 +700,13 @@ def main():
             gemini_model=args.gemini_model,
             claude_model=args.claude_model,
             fetch_only=args.fetch_only,
+            use_stats=args.popular_scan,
         )
         return
 
-    # ── 모드 1: --latest
-    if args.latest:
-        run_latest(channel, cfg, api_key, mode=args.mode, llm=args.llm, gemini_model=args.gemini_model, claude_model=args.claude_model, fetch_only=args.fetch_only)
+    # ── 모드 1: --latest [N]
+    if args.latest is not None:
+        run_latest(channel, cfg, api_key, count=args.latest, mode=args.mode, llm=args.llm, gemini_model=args.gemini_model, claude_model=args.claude_model, fetch_only=args.fetch_only)
         return
 
     # ── 모드 3: --keyword

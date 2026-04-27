@@ -264,16 +264,20 @@ def _get_channel_info(youtube, channel_url):
     )
 
 
-def get_latest_unprocessed(api_key, channel_url, processed_ids, max_check=30):
-    """채널 최신 영상 중 processed_ids에 없는 첫 번째 영상을 반환.
+def get_latest_unprocessed(api_key, channel_url, processed_ids, max_check=30, count=1):
+    """채널 최신 영상 중 processed_ids에 없는 영상을 최대 count개 반환.
 
-    Returns: list (0개 또는 1개)
+    count=1 (기본): 기존 동작과 동일 — 미처리 영상 1개만.
+    count>1:       최신순으로 미처리 영상을 count개까지 수집.
+
+    Returns: list (0개 ~ count개)
     """
     youtube = build('youtube', 'v3', developerKey=api_key)
     _, channel_name, uploads_playlist = _get_channel_info(youtube, channel_url)
 
+    found = []
     next_page, checked = None, 0
-    while checked < max_check:
+    while checked < max_check and len(found) < count:
         kwargs = dict(part='snippet', playlistId=uploads_playlist, maxResults=min(50, max_check - checked))
         if next_page:
             kwargs['pageToken'] = next_page
@@ -295,14 +299,20 @@ def get_latest_unprocessed(api_key, channel_url, processed_ids, max_check=30):
                     **_EMPTY_RICH_META,
                 }
                 logger.info(f"미처리 최신 영상 발견: {snippet['title']}")
-                return _fetch_video_details(youtube, [video])
+                found.append(video)
+                if len(found) >= count:
+                    break
 
         next_page = resp.get('nextPageToken')
         if not next_page:
             break
 
-    logger.info("미처리 영상 없음")
-    return []
+    if not found:
+        logger.info("미처리 영상 없음")
+        return []
+
+    logger.info(f"미처리 영상 {len(found)}개 발견")
+    return _fetch_video_details(youtube, found)
 
 
 def get_popular_videos(api_key, channel_url, max_results=50):
