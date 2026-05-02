@@ -1,0 +1,12 @@
+refactor: TEMPLATES 통합 + 기능 완성 7개
+
+- src/constants.py 신규: TEMPLATES dict 단일 원본 (3중 중복 제거)
+- main.py, plan.py, digest_runner.py: from src.constants import TEMPLATES
+- CLAUDE.md 전면 재작성: 14개 모듈, LLM 3경로, Fetch Run 아키텍처
+- docs/skill-spec.md v1.2.0 to v2.0.0: popular-scan, fetch-only, latest N 등 신규 기능 반영
+- discover.py: get_latest_unprocessed(count=N) 복수 지원
+- main.py: --latest [N] (nargs opt), --popular-scan (통계 기반 + 쇼츠 필터)
+- main.py: _process_video_list 키워드 필터링 (config.yaml filter.skip_keywords)
+- main.py: run_popular POPULAR.md 링크 인기/ subdir 우선 탐색 + relpath 수정
+- config.yaml: filter.skip_keywords 섹션 추가
+- docs/devlog/devlog-2026-04-28.md 추가
